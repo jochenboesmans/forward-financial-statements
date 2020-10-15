@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"github.com/joho/godotenv"
+	"github.com/sajari/regression"
 )
 
 type IncomeStatementTimeSeries []IncomeStatement
@@ -68,6 +69,59 @@ func (ists IncomeStatementTimeSeries) netIncomes() []float64 {
 }
 
 func main() {
+	switch (os.Args[1]) {
+		case "pull": pull()
+		case "predict": predict()
+	}
+}
+
+func init() {
+	godotenv.Load()
+}
+
+func predict() {
+	data, err := ioutil.ReadFile("financial-statements.json")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	istss := map[string]IncomeStatementTimeSeries{}
+	err = json.Unmarshal(data, &istss)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	//predictedIstss := map[string]IncomeStatementTimeSeries{}
+	for ticker, ists := range istss {
+		revenues := ists.revenues()
+
+		r := new(regression.Regression)
+		r.SetObserved("Revenue")
+		r.SetVar(0, "Quarter")
+		for i, rev := range revenues {
+			train(rev, i, r)
+		}
+		r.Run()
+
+		predictions := []float64{}
+		for i := range []int{0,1,2,3,4} {
+			prediction, err := r.Predict([]float64{float64(len(revenues)+i)})
+			if err == nil {
+				predictions = append(predictions, prediction)
+			}
+		}
+		fmt.Printf("%s: %+v\n", ticker, predictions)
+	}
+
+}
+
+func train(revenue float64, i int, r *regression.Regression) {
+	dp := regression.DataPoint(revenue, []float64{float64(i)})
+	r.Train(dp)
+}
+
+func pull() {
 	apiKey := os.Getenv("API_KEY")
 	tickers := []string{"NFLX", "SPOT", "TSLA", "LYFT", "TWTR", "FB", "MA", "UBER", "DAL", "AMZN", "DELL", "V", "SHOP", "MSFT", "AAPL", "NVDA", "AMD", "SQ", "INTC", "LEVI", "MU", "GOOG", "WORK", "DIS", "DOCU", "IBKR", "TKWY", "SPCE", "GPRO", "PTON", "ZM"}
 
@@ -89,8 +143,4 @@ func main() {
 	}
 
 	fmt.Println("all done")
-}
-
-func init() {
-	godotenv.Load()
 }
