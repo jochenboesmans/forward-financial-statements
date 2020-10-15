@@ -11,8 +11,8 @@ import (
 
 type IncomeStatementTimeSeries []IncomeStatement
 type IncomeStatement struct {
-	Revenue int `json:"revenue"`
-	NetIncome int `json:"netIncome"`
+	Revenue float64 `json:"revenue"`
+	NetIncome float64 `json:"netIncome"`
 }
 
 func request(ticker string, apiKey string) IncomeStatementTimeSeries {
@@ -51,15 +51,44 @@ func (ists IncomeStatementTimeSeries) reverse() {
 	}
 }
 
+func (ists IncomeStatementTimeSeries) revenues() []float64 {
+	r := []float64{}
+	for _, v := range ists {
+		r = append(r, v.Revenue)
+	}
+	return r
+}
+
+func (ists IncomeStatementTimeSeries) netIncomes() []float64 {
+	r := []float64{}
+	for _, v := range ists {
+		r = append(r, v.NetIncome)
+	}
+	return r
+}
+
 func main() {
 	apiKey := os.Getenv("API_KEY")
-	tickers := []string{"NFLX", "SPOT"}
+	tickers := []string{"NFLX", "SPOT", "TSLA", "LYFT", "TWTR", "FB", "MA", "UBER", "DAL", "AMZN", "DELL", "V", "SHOP", "MSFT", "AAPL", "NVDA", "AMD", "SQ", "INTC", "LEVI", "MU", "GOOG", "WORK", "DIS", "DOCU", "IBKR", "TKWY", "SPCE", "GPRO", "PTON", "ZM"}
 
 	incomeStatements := map[string]IncomeStatementTimeSeries{}
 	for _, t := range tickers {
 		incomeStatements[t] = request(t, apiKey)
 	}
-	fmt.Println(incomeStatements)
+
+	incomeStatementsJSON, err := json.Marshal(incomeStatements)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	err = ioutil.WriteFile("financial-statements.json", incomeStatementsJSON, 0644)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println("all done")
 }
 
 func init() {
