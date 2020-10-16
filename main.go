@@ -8,6 +8,7 @@ import (
 	"os"
 	"github.com/joho/godotenv"
 	"github.com/sajari/regression"
+	"sort"
 )
 
 type IncomeStatementTimeSeries []IncomeStatement
@@ -79,6 +80,34 @@ func init() {
 	godotenv.Load()
 }
 
+func (prwt PredictionResultsWithTicker) Len() int { return len(prwt) }
+func (prwt PredictionResultsWithTicker) Swap(i, j int) { prwt[i], prwt[j] = prwt[j], prwt[i] }
+func (prwt PredictionResultsWithTicker) Less(i, j int) bool { return len(prwt[i].PRS) != 0  && len(prwt[j].PRS) != 0 && prwt[i].PRS[len(prwt[i].PRS)-1] < prwt[j].PRS[len(prwt[j].PRS)-1] }
+type PredictionResultsWithTicker []PredictionResultWithTicker
+func (pr *PredictionResults) sort() PredictionResultsWithTicker {
+	array := []PredictionResultWithTicker{}
+	for k, v := range *pr {
+		array = append(array, PredictionResultWithTicker{
+			PredictionResult: v,
+			Ticker: k,
+		})
+	}
+
+	sort.Slice(array, func(i, j int) bool {
+		return len(array[i].PRS) != 0 && len(array[j].PRS) != 0 && array[i].PRS[len(array[i].PRS)-1] > array[j].PRS[len(array[j].PRS)-1]
+	})
+	return array
+}
+type PredictionResults map[string]PredictionResult
+type PredictionResult struct {
+	PES []float64
+	PRS []float64
+}
+type PredictionResultWithTicker struct {
+	PredictionResult
+	Ticker string
+}
+
 func predict() {
 	data, err := ioutil.ReadFile("financial-statements.json")
 	if err != nil {
@@ -92,7 +121,7 @@ func predict() {
 		os.Exit(1)
 	}
 
-	//predictedIstss := map[string]IncomeStatementTimeSeries{}
+	predictionResults := PredictionResults{}
 	for ticker, ists := range istss {
 		revenues := ists.revenues()
 
@@ -111,9 +140,78 @@ func predict() {
 				predictions = append(predictions, prediction)
 			}
 		}
-		fmt.Printf("%s: %+v\n", ticker, predictions)
+
+		netIncomes := ists.netIncomes()
+
+		r = new(regression.Regression)
+		r.SetObserved("NetIncome")
+		r.SetVar(0, "Quarter")
+		for i, netInc := range netIncomes {
+			train(netInc, i, r)
+		}
+		r.Run()
+
+		predictionsNetIncomes := []float64{}
+		for i := range []int{0,1,2,3,4} {
+			prediction, err := r.Predict([]float64{float64(len(netIncomes)+i)})
+			if err == nil {
+				predictionsNetIncomes = append(predictionsNetIncomes, prediction)
+			}
+		}
+
+		mcap := getMarketCap(ticker)
+		pes := []float64{}
+		for _, pni := range predictionsNetIncomes {
+			pes = append(pes, float64(mcap / (pni * 4)))
+		}
+		prs := []float64{}
+		for _, p := range predictions {
+			prs = append(prs, float64(mcap / (p * 4)))
+		}
+		predictionResult := PredictionResult{
+			PES: pes,
+			PRS: prs,
+		}
+		predictionResults[ticker] = predictionResult
 	}
 
+	sorted := predictionResults.sort()
+	fmt.Println(sorted)
+
+
+}
+
+type MarketCapResponse []MarketCap
+type MarketCap struct {
+	MarketCap float64 `json:"marketCap"`
+}
+
+func getMarketCap(ticker string) float64 {
+	apiKey := os.Getenv("API_KEY")
+	url := fmt.Sprintf("https://financialmodelingprep.com/api/v3/market-capitalization/%s?apikey=%s", ticker, apiKey)
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := ioutil.ReadAll(resp.Body)
+	if readErr != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(body))
+
+	r := MarketCapResponse{}
+	err = json.Unmarshal(body, &r)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("%+v", r)
+
+	if len(r) > 0 {
+		return r[0].MarketCap
+	}
+	return float64(0)
 }
 
 func train(revenue float64, i int, r *regression.Regression) {
@@ -123,7 +221,7 @@ func train(revenue float64, i int, r *regression.Regression) {
 
 func pull() {
 	apiKey := os.Getenv("API_KEY")
-	tickers := []string{"NFLX", "SPOT", "TSLA", "LYFT", "TWTR", "FB", "MA", "UBER", "DAL", "AMZN", "DELL", "V", "SHOP", "MSFT", "AAPL", "NVDA", "AMD", "SQ", "INTC", "LEVI", "MU", "GOOG", "WORK", "DIS", "DOCU", "IBKR", "TKWY", "SPCE", "GPRO", "PTON", "ZM"}
+	tickers := []string{"NFLX", "SPOT", "TSLA", "LYFT", "TWTR", "FB", "MA", "UBER", "DAL", "AMZN", "DELL", "V", "SHOP", "MSFT", "AAPL", "NVDA", "AMD", "SQ", "INTC", "LEVI", "MU", "GOOG", "WORK", "DIS", "DOCU", "IBKR", "SPCE", "GPRO", "PTON", "ZM"}
 
 	incomeStatements := map[string]IncomeStatementTimeSeries{}
 	for _, t := range tickers {
