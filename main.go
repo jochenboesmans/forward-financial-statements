@@ -1,19 +1,20 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"sort"
+
 	"github.com/joho/godotenv"
 	"github.com/sajari/regression"
-	"sort"
 )
 
 type IncomeStatementTimeSeries []IncomeStatement
 type IncomeStatement struct {
-	Revenue float64 `json:"revenue"`
+	Revenue   float64 `json:"revenue"`
 	NetIncome float64 `json:"netIncome"`
 }
 
@@ -70,9 +71,11 @@ func (ists IncomeStatementTimeSeries) netIncomes() []float64 {
 }
 
 func main() {
-	switch (os.Args[1]) {
-		case "pull": pull()
-		case "predict": predict()
+	switch os.Args[1] {
+	case "pull":
+		pull()
+	case "predict":
+		predict()
 	}
 }
 
@@ -80,16 +83,27 @@ func init() {
 	godotenv.Load()
 }
 
-func (prwt PredictionResultsWithTicker) Len() int { return len(prwt) }
+func (prwt PredictionResultsWithTicker) printFormatted() {
+	for _, v := range prwt {
+		fmt.Println(v.Ticker)
+		fmt.Println(v.PredictionResult.PES)
+		fmt.Println(v.PredictionResult.PRS)
+	}
+}
+func (prwt PredictionResultsWithTicker) Len() int      { return len(prwt) }
 func (prwt PredictionResultsWithTicker) Swap(i, j int) { prwt[i], prwt[j] = prwt[j], prwt[i] }
-func (prwt PredictionResultsWithTicker) Less(i, j int) bool { return len(prwt[i].PRS) != 0  && len(prwt[j].PRS) != 0 && prwt[i].PRS[len(prwt[i].PRS)-1] < prwt[j].PRS[len(prwt[j].PRS)-1] }
+func (prwt PredictionResultsWithTicker) Less(i, j int) bool {
+	return len(prwt[i].PRS) != 0 && len(prwt[j].PRS) != 0 && prwt[i].PRS[len(prwt[i].PRS)-1] < prwt[j].PRS[len(prwt[j].PRS)-1]
+}
+
 type PredictionResultsWithTicker []PredictionResultWithTicker
+
 func (pr *PredictionResults) sort() PredictionResultsWithTicker {
 	array := []PredictionResultWithTicker{}
 	for k, v := range *pr {
 		array = append(array, PredictionResultWithTicker{
 			PredictionResult: v,
-			Ticker: k,
+			Ticker:           k,
 		})
 	}
 
@@ -98,6 +112,7 @@ func (pr *PredictionResults) sort() PredictionResultsWithTicker {
 	})
 	return array
 }
+
 type PredictionResults map[string]PredictionResult
 type PredictionResult struct {
 	PES []float64
@@ -134,8 +149,8 @@ func predict() {
 		r.Run()
 
 		predictions := []float64{}
-		for i := range []int{0,1,2,3,4} {
-			prediction, err := r.Predict([]float64{float64(len(revenues)+i)})
+		for i := range []int{0, 1, 2, 3, 4} {
+			prediction, err := r.Predict([]float64{float64(len(revenues) + i)})
 			if err == nil {
 				predictions = append(predictions, prediction)
 			}
@@ -152,8 +167,8 @@ func predict() {
 		r.Run()
 
 		predictionsNetIncomes := []float64{}
-		for i := range []int{0,1,2,3,4} {
-			prediction, err := r.Predict([]float64{float64(len(netIncomes)+i)})
+		for i := range []int{0, 1, 2, 3, 4} {
+			prediction, err := r.Predict([]float64{float64(len(netIncomes) + i)})
 			if err == nil {
 				predictionsNetIncomes = append(predictionsNetIncomes, prediction)
 			}
@@ -162,11 +177,11 @@ func predict() {
 		mcap := getMarketCap(ticker)
 		pes := []float64{}
 		for _, pni := range predictionsNetIncomes {
-			pes = append(pes, float64(mcap / (pni * 4)))
+			pes = append(pes, float64(mcap/(pni*4)))
 		}
 		prs := []float64{}
 		for _, p := range predictions {
-			prs = append(prs, float64(mcap / (p * 4)))
+			prs = append(prs, float64(mcap/(p*4)))
 		}
 		predictionResult := PredictionResult{
 			PES: pes,
@@ -176,8 +191,8 @@ func predict() {
 	}
 
 	sorted := predictionResults.sort()
-	fmt.Println(sorted)
 
+	sorted.printFormatted()
 
 }
 
