@@ -83,12 +83,14 @@ func init() {
 	godotenv.Load()
 }
 
-func (prwt PredictionResultsWithTicker) printFormatted() {
+func (prwt PredictionResultsWithTicker) format() string {
+	r := ""
 	for _, v := range prwt {
-		fmt.Println(v.Ticker)
-		fmt.Println(v.PredictionResult.PES)
-		fmt.Println(v.PredictionResult.PRS)
+		r += fmt.Sprintf("%s:\n", v.Ticker)
+		r += fmt.Sprintf("forward quarterly P/E: %+v\n", v.PredictionResult.PES)
+		r += fmt.Sprintf("forward quarterly P/R: %+v\n", v.PredictionResult.PRS)
 	}
+	return r
 }
 func (prwt PredictionResultsWithTicker) Len() int      { return len(prwt) }
 func (prwt PredictionResultsWithTicker) Swap(i, j int) { prwt[i], prwt[j] = prwt[j], prwt[i] }
@@ -192,7 +194,13 @@ func predict() {
 
 	sorted := predictionResults.sort()
 
-	sorted.printFormatted()
+	forwardValuations := sorted.format()
+
+	err = ioutil.WriteFile("forwardValuations.txt", []byte(forwardValuations), 0644)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 }
 
@@ -214,14 +222,12 @@ func getMarketCap(ticker string) float64 {
 	if readErr != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(string(body))
 
 	r := MarketCapResponse{}
 	err = json.Unmarshal(body, &r)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Printf("%+v", r)
 
 	if len(r) > 0 {
 		return r[0].MarketCap
