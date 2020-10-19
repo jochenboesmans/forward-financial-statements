@@ -196,12 +196,13 @@ func predict() {
 
 	forwardValuations := sorted.format()
 
-	err = ioutil.WriteFile("forwardValuations.txt", []byte(forwardValuations), 0644)
+	err = ioutil.WriteFile("cloudflare-fw-valuation.txt", []byte(forwardValuations), 0644)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
+	fmt.Println("all done")
 }
 
 type MarketCapResponse []MarketCap
@@ -240,9 +241,26 @@ func train(revenue float64, i int, r *regression.Regression) {
 	r.Train(dp)
 }
 
+type tickers []string
+
+func getTickers() tickers {
+	file, err := ioutil.ReadFile("tickers.json")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	t := tickers{}
+	err = json.Unmarshal(file, &t)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	return t
+}
+
 func pull() {
 	apiKey := os.Getenv("API_KEY")
-	tickers := []string{"NFLX", "SPOT", "TSLA", "LYFT", "TWTR", "FB", "MA", "UBER", "DAL", "AMZN", "DELL", "V", "SHOP", "MSFT", "AAPL", "NVDA", "AMD", "SQ", "INTC", "LEVI", "MU", "GOOG", "WORK", "DIS", "DOCU", "IBKR", "SPCE", "GPRO", "PTON", "ZM"}
+	tickers := getTickers()
 
 	incomeStatements := map[string]IncomeStatementTimeSeries{}
 	for _, t := range tickers {
