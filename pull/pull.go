@@ -8,13 +8,30 @@ import (
 	"os"
 )
 
+type tickers []string
+
+func getTickers() tickers {
+	file, err := ioutil.ReadFile("tickers.json")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	t := tickers{}
+	err = json.Unmarshal(file, &t)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	return t
+}
+
 type IncomeStatementTimeSeries []IncomeStatement
 type IncomeStatement struct {
 	Revenue   float64 `json:"revenue"`
 	NetIncome float64 `json:"netIncome"`
 }
 
-func request(ticker string, apiKey string) IncomeStatementTimeSeries {
+func getIncomeStatements(ticker string, apiKey string) IncomeStatementTimeSeries {
 	url := fmt.Sprintf("https://financialmodelingprep.com/api/v3/income-statement/%s?period=quarter&limit=400&apikey=%s", ticker, apiKey)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -66,30 +83,13 @@ func (ists IncomeStatementTimeSeries) NetIncomes() []float64 {
 	return r
 }
 
-type tickers []string
-
-func getTickers() tickers {
-	file, err := ioutil.ReadFile("tickers.json")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	t := tickers{}
-	err = json.Unmarshal(file, &t)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	return t
-}
-
 func Pull() {
 	apiKey := os.Getenv("API_KEY")
 	tickers := getTickers()
 
 	incomeStatements := map[string]IncomeStatementTimeSeries{}
 	for _, t := range tickers {
-		incomeStatements[t] = request(t, apiKey)
+		incomeStatements[t] = getIncomeStatements(t, apiKey)
 	}
 
 	incomeStatementsJSON, err := json.Marshal(incomeStatements)
