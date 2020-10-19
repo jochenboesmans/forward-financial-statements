@@ -196,7 +196,7 @@ func predict() {
 
 	forwardValuations := sorted.format()
 
-	err = ioutil.WriteFile("cloudflare-fw-valuation.txt", []byte(forwardValuations), 0644)
+	err = ioutil.WriteFile("forward-valuations.txt", []byte(forwardValuations), 0644)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
