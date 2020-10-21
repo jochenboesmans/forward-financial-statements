@@ -2,33 +2,25 @@ package pull
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+
+	"github.com/gocql/gocql"
+	"github.com/jochenboesmans/forward-financial-statements/tickers"
 )
-
-type tickers []string
-
-func getTickers() tickers {
-	file, err := ioutil.ReadFile("tickers.json")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	t := tickers{}
-	err = json.Unmarshal(file, &t)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	return t
-}
 
 type IncomeStatementTimeSeries []IncomeStatement
 type IncomeStatement struct {
-	Revenue   float64 `json:"revenue"`
-	NetIncome float64 `json:"netIncome"`
+	Revenue              float64 `json:"revenue"`
+	NetIncome            float64 `json:"netIncome"`
+	GrossProfitRatio     float64 `json:"grossProfitRatio"`
+	EbitdaRatio          float64 `json:"ebitdaratio"`
+	OperatingIncomeRatio float64 `json:"operatingIncomeRatio"`
+	IncomeBeforeTaxRatio float64 `json:"incomeBeforeTaxRatio"`
+	NetIncomeRatio       float64 `json:"NetIncomeRatio"`
 }
 
 func getIncomeStatements(ticker string, apiKey string) IncomeStatementTimeSeries {
@@ -67,28 +59,44 @@ func (ists IncomeStatementTimeSeries) reverse() {
 	}
 }
 
-func (ists IncomeStatementTimeSeries) Revenues() []float64 {
+func (is IncomeStatement) access(property string) (float64, error) {
+	switch property {
+	case "Revenue":
+		return is.Revenue, nil
+	case "NetIncome":
+		return is.NetIncome, nil
+	case "GrossProfitRatio":
+		return is.GrossProfitRatio, nil
+	case "OperatingIncomeRatio":
+		return is.OperatingIncomeRatio, nil
+	case "IncomeBeforeTaxRatio":
+		return is.IncomeBeforeTaxRatio, nil
+	case "NetIncomeRatio":
+		return is.NetIncomeRatio, nil
+	case "EbitdaRatio":
+		return is.EbitdaRatio, nil
+	default:
+		return 0.0, errors.New("invalid property name")
+	}
+}
+
+func (ists IncomeStatementTimeSeries) Select(property string) []float64 {
 	r := []float64{}
-	for _, v := range ists {
-		r = append(r, v.Revenue)
+	for _, is := range ists {
+		if propertyValue, err := is.access(property); err == nil {
+			r = append(r, propertyValue)
+		}
 	}
 	return r
 }
 
-func (ists IncomeStatementTimeSeries) NetIncomes() []float64 {
-	r := []float64{}
-	for _, v := range ists {
-		r = append(r, v.NetIncome)
-	}
-	return r
-}
-
-func Pull() {
+func Pull(dbSession *gocql.Session) {
 	apiKey := os.Getenv("API_KEY")
-	tickers := getTickers()
+	// TODO: error handling
+	ts, _ := tickers.ReadTickersFromDb(dbSession)
 
 	incomeStatements := map[string]IncomeStatementTimeSeries{}
-	for _, t := range tickers {
+	for _, t := range ts {
 		incomeStatements[t] = getIncomeStatements(t, apiKey)
 	}
 

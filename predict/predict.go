@@ -24,8 +24,13 @@ func (prwt PredictionResultsWithTicker) format() string {
 	r := ""
 	for _, v := range prwt {
 		r += fmt.Sprintf("%s:\n", v.Ticker)
-		r += fmt.Sprintf("forward quarterly P/E: %+v\n", v.PredictionResult.PES)
-		r += fmt.Sprintf("forward quarterly P/R: %+v\n", v.PredictionResult.PRS)
+		r += fmt.Sprintf("P/R: %+v\n", v.PredictionResult.PRS)
+		r += fmt.Sprintf("P/E: %+v\n", v.PredictionResult.PES)
+		r += fmt.Sprintf("grossProfitRatio: %+v\n", v.PredictionResult.GrossProfitRatios)
+		r += fmt.Sprintf("ebitdaratio: %+v\n", v.PredictionResult.EbitdaRatios)
+		r += fmt.Sprintf("operatingIncomeRatio: %+v\n", v.PredictionResult.OperatingIncomeRatios)
+		r += fmt.Sprintf("incomeBeforeTaxRatio: %+v\n", v.PredictionResult.IncomeBeforeTaxRatios)
+		r += fmt.Sprintf("netIncomeRatio: %+v\n", v.PredictionResult.NetIncomeRatios)
 	}
 	return r
 }
@@ -47,8 +52,13 @@ func (pr *PredictionResults) sort() PredictionResultsWithTicker {
 
 type PredictionResults map[string]PredictionResult
 type PredictionResult struct {
-	PES []float64
-	PRS []float64
+	PES                   []float64
+	PRS                   []float64
+	GrossProfitRatios     []float64
+	EbitdaRatios          []float64
+	OperatingIncomeRatios []float64
+	IncomeBeforeTaxRatios []float64
+	NetIncomeRatios       []float64
 }
 type PredictionResultWithTicker struct {
 	PredictionResult
@@ -69,55 +79,30 @@ func Predict() {
 	}
 
 	predictionResults := PredictionResults{}
+	metrics := []string{"Revenue", "NetIncome", "GrossProfitRatio", "EbitdaRatio", "OperatingIncomeRatio", "IncomeBeforeTaxRatio", "NetIncomeRatio"}
 	for ticker, ists := range istss {
-		revenues := ists.Revenues()
-
-		r := new(regression.Regression)
-		r.SetObserved("Revenue")
-		r.SetVar(0, "Quarter")
-		for i, rev := range revenues {
-			train(rev, i, r)
-		}
-		r.Run()
-
-		predictions := []float64{}
-		for i := range []int{0, 1, 2, 3, 4} {
-			prediction, err := r.Predict([]float64{float64(len(revenues) + i)})
-			if err == nil {
-				predictions = append(predictions, prediction)
-			}
-		}
-
-		netIncomes := ists.NetIncomes()
-
-		r = new(regression.Regression)
-		r.SetObserved("NetIncome")
-		r.SetVar(0, "Quarter")
-		for i, netInc := range netIncomes {
-			train(netInc, i, r)
-		}
-		r.Run()
-
-		predictionsNetIncomes := []float64{}
-		for i := range []int{0, 1, 2, 3, 4} {
-			prediction, err := r.Predict([]float64{float64(len(netIncomes) + i)})
-			if err == nil {
-				predictionsNetIncomes = append(predictionsNetIncomes, prediction)
-			}
+		predictions := [][]float64{}
+		for _, metric := range metrics {
+			predictions = append(predictions, predictMetric(ists, metric))
 		}
 
 		mcap := market_cap.GetMarketCap(ticker)
 		pes := []float64{}
-		for _, pni := range predictionsNetIncomes {
+		for _, pni := range predictions[1] {
 			pes = append(pes, float64(mcap/(pni*4)))
 		}
 		prs := []float64{}
-		for _, p := range predictions {
+		for _, p := range predictions[0] {
 			prs = append(prs, float64(mcap/(p*4)))
 		}
 		predictionResult := PredictionResult{
-			PES: pes,
-			PRS: prs,
+			PES:                   pes,
+			PRS:                   prs,
+			GrossProfitRatios:     predictions[2],
+			EbitdaRatios:          predictions[3],
+			OperatingIncomeRatios: predictions[4],
+			IncomeBeforeTaxRatios: predictions[5],
+			NetIncomeRatios:       predictions[6],
 		}
 		predictionResults[ticker] = predictionResult
 	}
@@ -133,6 +118,27 @@ func Predict() {
 	}
 
 	fmt.Println("all done")
+}
+
+func predictMetric(ists pull.IncomeStatementTimeSeries, metric string) []float64 {
+	values := ists.Select(metric)
+
+	r := new(regression.Regression)
+	r.SetObserved(metric)
+	r.SetVar(0, "Quarter")
+	for i, v := range values {
+		train(v, i, r)
+	}
+	r.Run()
+
+	predictions := []float64{}
+	for i := range []int{0, 1, 2, 3, 4} {
+		if prediction, err := r.Predict([]float64{float64(len(values) + i)}); err == nil {
+			predictions = append(predictions, prediction)
+		}
+	}
+
+	return predictions
 }
 
 func train(revenue float64, i int, r *regression.Regression) {
