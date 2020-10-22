@@ -56,10 +56,6 @@ func (ts tickers) writeToDb(dbSession *gocql.Session) error {
 
 	err := dbSession.ExecuteBatch(batch)
 	if err != nil {
-<<<<<<< HEAD
-=======
-		fmt.Println(err)
->>>>>>> bbb2d4a8a1b2899a30017a899d455aca91f3430e
 		return err
 	}
 	return nil
