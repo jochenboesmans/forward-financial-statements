@@ -3,7 +3,6 @@ package tickers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -17,7 +16,10 @@ func WriteFileContentToDb(dbSession *gocql.Session) error {
 	if err != nil {
 		return err
 	}
-	ts.writeToDb(dbSession)
+	err = ts.writeToDb(dbSession)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -34,21 +36,29 @@ func readTickersFromDisk() (tickers, error) {
 	return t, nil
 }
 
-func (ts tickers) writeToDb(dbSession *gocql.Session) {
+func (ts tickers) writeToDb(dbSession *gocql.Session) error {
 	keySpaceMeta, _ := dbSession.KeyspaceMetadata(os.Getenv("CASSANDRA_KEYSPACE"))
 
 	if _, exists := keySpaceMeta.Tables["tickers"]; exists != true {
-		fmt.Println("not exists")
+		// create table
 		dbSession.Query("CREATE TABLE tickers (" +
 			"id text, " +
-			"PRIMARY KEY (id))").Exec()
+			"PRIMARY KEY (id));").Exec()
 	} else {
-		dbSession.Query("DELETE FROM tickers").Exec()
+		// wipe existing table
+		dbSession.Query("TRUNCATE tickers").Exec()
 	}
 
+	batch := dbSession.NewBatch(gocql.LoggedBatch)
 	for _, t := range ts {
-		dbSession.Query("INSERT INTO tickers (id) VALUES (?)", t).Exec()
+		batch.Query("INSERT INTO tickers (id) VALUES (?);", t)
 	}
+
+	err := dbSession.ExecuteBatch(batch)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func ReadTickersFromDb(dbSession *gocql.Session) (tickers, error) {
