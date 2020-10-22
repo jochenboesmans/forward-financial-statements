@@ -6,6 +6,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/jochenboesmans/forward-financial-statements/predict"
+	"github.com/jochenboesmans/forward-financial-statements/pull"
 	"github.com/jochenboesmans/forward-financial-statements/tickers"
 	"github.com/joho/godotenv"
 )
@@ -15,6 +16,7 @@ var dbSession *gocql.Session
 func main() {
 	switch os.Args[1] {
 	case "pull":
+		pull.Pull(dbSession)
 	case "predict":
 		predict.Predict()
 	case "write-tickers-to-db":

@@ -45,6 +45,7 @@ func getIncomeStatements(ticker string, apiKey string) IncomeStatementTimeSeries
 		return IncomeStatementTimeSeries{}
 	}
 	r.reverse()
+
 	return r
 }
 
