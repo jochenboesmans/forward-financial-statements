@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/jochenboesmans/forward-financial-statements/market_cap"
 	"github.com/jochenboesmans/forward-financial-statements/pull"
 	"github.com/sajari/regression"
 )
@@ -85,8 +86,7 @@ func Predict() {
 			predictions = append(predictions, predictMetric(ists, metric))
 		}
 
-		//mcap := market_cap.GetMarketCap(ticker)
-		mcap := float64(213546000000)
+		mcap := market_cap.GetMarketCap(ticker)
 		pes := []float64{}
 		for _, pni := range predictions[1] {
 			pes = append(pes, float64(mcap/(pni*4)))
