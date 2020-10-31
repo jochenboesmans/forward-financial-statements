@@ -12,6 +12,7 @@ import (
 	"github.com/jochenboesmans/forward-financial-statements/tickers"
 )
 
+type IncomeStatementTimeSeriesByTicker map[string]IncomeStatementTimeSeries
 type IncomeStatementTimeSeries []IncomeStatement
 type IncomeStatement struct {
 	Revenue              float64 `json:"revenue"`
@@ -91,27 +92,76 @@ func (ists IncomeStatementTimeSeries) Select(property string) []float64 {
 	return r
 }
 
-func Pull(dbSession *gocql.Session) {
+func Pull(dbSession *gocql.Session) error {
 	apiKey := os.Getenv("API_KEY")
 	// TODO: error handling
-	ts, _ := tickers.ReadTickersFromDb(dbSession)
+	ts, err := tickers.ReadTickersFromDb(dbSession)
+	if err != nil {
+		return err
+	}
 
-	incomeStatements := map[string]IncomeStatementTimeSeries{}
+	incomeStatements := IncomeStatementTimeSeriesByTicker{}
 	for _, t := range ts {
 		incomeStatements[t] = getIncomeStatements(t, apiKey)
 	}
 
-	incomeStatementsJSON, err := json.Marshal(incomeStatements)
+	err = incomeStatements.writeToDb(dbSession)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
-	err = ioutil.WriteFile("financial-statements.json", incomeStatementsJSON, 0644)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	// incomeStatementsJSON, err := json.Marshal(incomeStatements)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+
+	// err = ioutil.WriteFile("financial-statements.json", incomeStatementsJSON, 0644)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+
+	return nil
+}
+
+func (istsbt IncomeStatementTimeSeriesByTicker) writeToDb(dbSession *gocql.Session) error {
+	keySpaceMeta, _ := dbSession.KeyspaceMetadata(os.Getenv("CASSANDRA_KEYSPACE"))
+
+	if _, exists := keySpaceMeta.Tables["incomestatements"]; exists != true {
+		// create table
+		err := dbSession.Query("CREATE TABLE incomestatements (" +
+			"ticker text, " +
+			"quarter int, " +
+			"revenue double, " +
+			"netIncome double, " +
+			"grossProfitRatio double, " +
+			"ebitdaRatio double, " +
+			"incomeBeforeTaxRatio double, " +
+			"netIncomeRatio double, " +
+			"PRIMARY KEY (ticker, quarter));").Exec()
+		if err != nil {
+			return err
+		}
+	} else {
+		// wipe existing table
+		err := dbSession.Query("TRUNCATE incomestatements").Exec()
+		if err != nil {
+			return err
+		}
 	}
 
-	fmt.Println("all done")
+	batch := dbSession.NewBatch(gocql.LoggedBatch)
+	for t, ists := range istsbt {
+		for i, is := range ists {
+			statement := "INSERT INTO incomestatements (ticker, quarter, revenue, netIncome, grossProfitRatio, ebitdaRatio, incomeBeforeTaxRatio, netIncomeRatio) VALUES (?,?,?,?,?,?,?,?);"
+			batch.Query(statement, t, i, is.Revenue, is.NetIncome, is.GrossProfitRatio, is.EbitdaRatio, is.IncomeBeforeTaxRatio, is.NetIncomeRatio)
+		}
+	}
+
+	err := dbSession.ExecuteBatch(batch)
+	if err != nil {
+		return err
+	}
+	return nil
 }

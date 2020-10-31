@@ -16,7 +16,10 @@ var dbSession *gocql.Session
 func main() {
 	switch os.Args[1] {
 	case "pull":
-		pull.Pull(dbSession)
+		err := pull.Pull(dbSession)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	case "predict":
 		predict.Predict()
 	case "write-tickers-to-db":
